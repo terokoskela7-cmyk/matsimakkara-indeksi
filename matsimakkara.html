@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matsimakkara-indeksi — Stadionmakkaroiden ranking</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #c9a84c; --gold-light: #e8c87a; --burgundy: #8B3A3A;
+    --bg: #0f0f0f; --surface: #1a1a1a; --surface-up: #242424; --surface-hover: #2e2e2e;
+    --text: #f5f0e6; --text-muted: #a09a8e;
+    --good: #6b9e6b; --ok: #c9a84c; --bad: #b55a5a;
+    --border: #2a2a2a; --radius: 12px; --radius-lg: 16px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4); --transition: 0.3s cubic-bezier(0.4,0,0.2,1);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height:1.5; overflow-x:hidden; }
+  h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; font-weight:700; }
+
+  /* Header */
+  header { position:sticky; top:0; z-index:100; background: rgba(15,15,15,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 0.8rem 1.5rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; }
+  .logo { display:flex; align-items:center; gap:0.7rem; font-family: 'Space Grotesk', sans-serif; font-weight:700; font-size:1.3rem; color: var(--gold); letter-spacing: -0.02em; }
+  .logo i { font-size:1.5rem; }
+  .header-right { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+
+  /* Search */
+  .search-wrap { position:relative; }
+  .search-input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 1rem 0.5rem 2.4rem; border-radius: 8px; font-size:0.9rem; width: 220px; transition: var(--transition); font-family: 'Inter', sans-serif; }
+  .search-input:focus { outline:none; border-color: var(--gold); width: 280px; }
+  .search-wrap i { position:absolute; left:0.8rem; top:50%; transform:translateY(-50%); color: var(--text-muted); font-size:0.85rem; }
+
+  /* User */
+  .user-badge { display:flex; align-items:center; gap:0.5rem; background: var(--surface); border: 1px solid var(--border); padding: 0.4rem 0.8rem; border-radius: 8px; cursor:pointer; font-size:0.85rem; transition: var(--transition); }
+  .user-badge:hover { background: var(--surface-up); border-color: var(--gold); }
+  .user-avatar { font-size:1.2rem; }
+
+  /* Hero */
+  .hero { text-align:center; padding: 2rem 1.5rem 1rem; background: linear-gradient(180deg, rgba(201,168,76,0.05) 0%, transparent 100%); border-bottom: 1px solid var(--border); }
+  .hero h1 { font-family: 'Bebas Neue', sans-serif; font-size: 3.5rem; letter-spacing: 0.05em; color: var(--gold); margin-bottom: 0.5rem; line-height:1.1; }
+  .hero p { color: var(--text-muted); font-size: 1.05rem; max-width: 500px; margin: 0 auto; }
+  .hero-stats { display:flex; justify-content:center; gap: 2rem; margin-top: 1rem; flex-wrap:wrap; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-family: 'Bebas Neue', sans-serif; font-size: 2.2rem; color: var(--gold); line-height:1; }
+  .hero-stat .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* Map */
+  .hero-map { width: 100%; height: 55vh; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); position:relative; }
+  .hero-map #map { width: 100%; height: 100%; }
+  .map-overlay { position:absolute; top:1rem; left:1rem; z-index:500; background: rgba(15,15,15,0.85); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 10px; padding: 0.8rem 1.2rem; pointer-events:none; }
+  .map-overlay h2 { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; color: var(--gold); letter-spacing: 0.03em; }
+  .map-overlay p { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+  .map-legend { display:flex; gap: 1rem; margin-top: 0.6rem; }
+  .map-legend-item { display:flex; align-items:center; gap: 0.4rem; font-size: 0.75rem; color: var(--text-muted); }
+  .map-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* Scroll hint */
+  .scroll-hint { text-align:center; padding: 0.8rem; color: var(--text-muted); font-size: 0.8rem; }
+  .scroll-hint i { font-size: 0.9rem; margin-right: 0.4rem; }
+
+  /* Cards */
+  .cards-section { padding: 1.5rem; max-width: 1300px; margin: 0 auto; }
+  .cards-section h2 { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; color: var(--gold); margin-bottom: 1.5rem; letter-spacing: 0.03em; text-align:center; }
+  .cards-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; cursor:pointer; transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition); position:relative; overflow:hidden; }
+  .card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background: linear-gradient(90deg, var(--gold), transparent); opacity:0; transition: opacity var(--transition); }
+  .card:hover { transform: translateY(-6px); box-shadow: var(--shadow), 0 0 40px rgba(201,168,76,0.08); border-color: rgba(201,168,76,0.3); }
+  .card:hover::before { opacity:1; }
+  .rank-badge { position:absolute; top:0.8rem; right:0.8rem; font-size:1.6rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+  @keyframes popIn { from { transform: scale(0); opacity:0; } to { transform: scale(1); opacity:1; } }
+  .card-header { margin-bottom:0.75rem; }
+  .card-header h3 { font-family: 'Bebas Neue', sans-serif; font-size:1.4rem; font-weight:400; letter-spacing:0.03em; color: var(--text); margin-bottom:0.2rem; }
+  .card-header .city { font-size:0.85rem; color: var(--text-muted); display:flex; align-items:center; gap:0.4rem; }
+  .score-row { display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem; }
+  .score-big { font-family: 'Bebas Neue', sans-serif; font-size:2.4rem; font-weight:400; line-height:1; letter-spacing:0.02em; }
+  .score-good { color: var(--good); } .score-ok { color: var(--ok); } .score-bad { color: var(--bad); }
+  .score-label { font-size:0.7rem; color: var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; }
+  .card-bars { margin-bottom:0.75rem; }
+  .bar-row { display:flex; align-items:center; gap:0.5rem; font-size:0.8rem; margin:0.35rem 0; }
+  .bar-icon { width:1.2rem; text-align:center; }
+  .bar-name { width:120px; color: var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-bg { flex:1; height:5px; background: var(--surface-up); border-radius:3px; overflow:hidden; max-width:150px; }
+  .bar-fill { height:100%; border-radius:3px; transition: width 0.6s cubic-bezier(0.4,0,0.2,1); }
+  .bar-val { width:1.8rem; text-align:right; color: var(--text-muted); font-size:0.75rem; }
+  .card-footer { display:flex; gap:1.2rem; font-size:0.8rem; color: var(--text-muted); margin-top:0.5rem; padding-top:0.6rem; border-top:1px solid var(--border); }
+  .card-footer i { margin-right:0.3rem; color: var(--gold); font-size:0.75rem; }
+  .card-matches { margin-top:0.6rem; padding-top:0.5rem; border-top:1px solid var(--border); }
+  .card-match-item { display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; padding:0.25rem 0; }
+  .card-match-item .match-live { color: var(--good); font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
+  .card-match-item .match-date { color: var(--text-muted); }
+  .empty-state { text-align:center; padding:5rem 1rem; color: var(--text-muted); }
+  .empty-state i { font-size:3rem; color: var(--gold); margin-bottom:1rem; display:block; }
+
+  /* Live ticker */
+  .live-ticker { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.6rem 1.5rem; display:flex; align-items:center; gap: 1rem; overflow-x:auto; white-space:nowrap; }
+  .live-ticker-title { font-size:0.8rem; color: var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; flex-shrink:0; }
+  .live-match { display:inline-flex; align-items:center; gap:0.5rem; font-size:0.85rem; padding: 0.3rem 0.8rem; border-radius: 6px; border: 1px solid var(--border); flex-shrink:0; }
+  .live-match .live-dot { width: 8px; height: 8px; border-radius:50%; background: var(--good); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0% { opacity:1; } 50% { opacity:0.4; } 100% { opacity:1; } }
+  .live-match .match-time { color: var(--gold); font-weight:600; }
+  .live-match .match-teams { color: var(--text-muted); }
+  .live-match .match-score { color: var(--text); font-weight:700; }
+  .ticker-refresh { font-size:0.75rem; color: var(--text-muted); cursor:pointer; margin-left:auto; flex-shrink:0; }
+  .ticker-refresh:hover { color: var(--gold); }
+  .api-status { font-size:0.75rem; color: var(--text-muted); margin-left:1rem; flex-shrink:0; }
+  .api-status.ok { color: var(--good); } .api-status.error { color: var(--bad); }
+  .api-status .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:0.3rem; }
+
+  /* Drawer */
+  .drawer-overlay { position:fixed; inset:0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display:none; z-index:1000; transition: opacity var(--transition); }
+  .drawer-overlay.active { display:block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  .drawer { position:fixed; top:0; right:0; bottom:0; width: 100%; max-width: 680px; background: var(--bg); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform 0.35s cubic-bezier(0.4,0,0.2,1); z-index:1001; display:flex; flex-direction:column; overflow:hidden; }
+  .drawer.active { transform: translateX(0); }
+  .drawer-header { display:flex; align-items:center; justify-content:space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink:0; }
+  .drawer-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; letter-spacing: 0.03em; }
+  .drawer-close { background:transparent; border:none; color: var(--text-muted); font-size:1.6rem; cursor:pointer; padding:0.25rem; transition: color var(--transition); }
+  .drawer-close:hover { color: var(--text); }
+  .drawer-tabs { display:flex; gap:0.5rem; padding: 0 1.5rem; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink:0; }
+  .drawer-tab-btn { background:transparent; border:none; color: var(--text-muted); padding: 0.75rem 1rem; cursor:pointer; font-weight:600; font-family: 'Space Grotesk', sans-serif; border-bottom: 2px solid transparent; font-size:0.9rem; transition: var(--transition); }
+  .drawer-tab-btn:hover { color: var(--text); }
+  .drawer-tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .drawer-body { overflow-y:auto; padding: 1.5rem; flex:1; }
+  .drawer-pane { display:none; }
+  .drawer-pane.active { display:block; animation: slideUp 0.3s ease; }
+  @keyframes slideUp { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+
+  /* Info pane */
+  .info-section { margin-bottom:1.5rem; }
+  .info-section h4 { font-size:0.8rem; text-transform:uppercase; color: var(--text-muted); letter-spacing:0.08em; margin-bottom:0.6rem; font-family: 'Space Grotesk', sans-serif; }
+  .info-section p { font-size:0.95rem; color: var(--text-muted); }
+  .price-input { display:flex; align-items:center; gap:0.5rem; }
+  .price-input input { background: var(--surface-up); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 6px; width: 100px; font-size:0.95rem; }
+  .price-input input:focus { outline:none; border-color: var(--gold); }
+  .match-form { display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.75rem; }
+  .match-form input { background: var(--surface-up); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 6px; font-size:0.9rem; }
+  .match-form input:focus { outline:none; border-color: var(--gold); }
+  .match-list { max-height: 200px; overflow-y:auto; }
+  .match-item { display:flex; justify-content:space-between; align-items:center; padding: 0.6rem 0; border-bottom: 1px solid var(--border); font-size:0.9rem; }
+  .match-item .match-live { color: var(--good); font-size:0.7rem; font-weight:700; text-transform:uppercase; }
+  .match-item .match-score { font-weight:700; color: var(--text); }
+  .match-date { color: var(--text-muted); font-size:0.8rem; }
+  .image-upload { margin-top:0.5rem; }
+  .image-upload input[type="file"] { display:none; }
+  .upload-btn { display:inline-flex; align-items:center; gap:0.4rem; background: var(--surface-up); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 1rem; border-radius: 6px; cursor:pointer; font-size:0.9rem; transition: var(--transition); }
+  .upload-btn:hover { background: var(--surface-hover); border-color: var(--gold); }
+  .gallery { display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.75rem; }
+  .gallery-thumb { width: 90px; height: 90px; object-fit:cover; border-radius: 8px; border: 1px solid var(--border); cursor:pointer; background: var(--surface-up); transition: transform var(--transition); }
+  .gallery-thumb:hover { transform: scale(1.05); border-color: var(--gold); }
+
+  /* Review pane */
+  .criterion-row { display:flex; align-items:center; justify-content:space-between; margin: 1rem 0; padding: 0.7rem 0; border-bottom: 1px solid var(--border); }
+  .criterion-label { display:flex; align-items:center; gap:0.6rem; font-size:0.95rem; }
+  .stars { display:flex; gap:0.25rem; font-size:1.5rem; cursor:pointer; }
+  .star { color: var(--surface-up); transition: color 0.15s; user-select:none; }
+  .star.filled { color: var(--gold); } .star.hovered { color: var(--gold-light); }
+  .comment-area { width:100%; background: var(--surface-up); border: 1px solid var(--border); color: var(--text); padding: 0.75rem; border-radius: 6px; font-family: 'Inter', sans-serif; font-size:0.9rem; margin-top:0.75rem; min-height: 80px; resize:vertical; }
+  .comment-area:focus { outline:none; border-color: var(--gold); }
+  .btn { background: var(--gold); color: var(--bg); border:none; padding: 0.65rem 1.5rem; border-radius: 6px; font-weight:600; cursor:pointer; font-size:0.95rem; font-family: 'Space Grotesk', sans-serif; transition: var(--transition); margin-top:0.75rem; }
+  .btn:hover { background: var(--gold-light); }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .btn-secondary { background: var(--surface-up); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--surface-hover); border-color: var(--gold); }
+
+  /* Reviews pane */
+  .review-item { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom:0.75rem; }
+  .review-meta { display:flex; justify-content:space-between; font-size:0.8rem; color: var(--text-muted); margin-bottom:0.4rem; }
+  .review-stars { color: var(--gold); font-size:1rem; margin-bottom:0.4rem; }
+  .review-comment { font-size:0.9rem; color: #c0b8a8; }
+  .review-author { color: var(--gold); font-weight:600; }
+  .criteria-summary { display:grid; grid-template-columns: repeat(2, 1fr); gap:0.6rem; margin-bottom:1rem; }
+  .crit-summary-item { display:flex; justify-content:space-between; align-items:center; background: var(--surface); padding: 0.5rem 0.75rem; border-radius: 6px; font-size:0.85rem; border: 1px solid var(--border); }
+  .crit-summary-name { color: var(--text-muted); } .crit-summary-val { font-weight:600; color: var(--gold); }
+  .share-section { margin-top:1.5rem; padding-top:1rem; border-top: 1px solid var(--border); }
+  .share-btn { display:inline-flex; align-items:center; gap:0.5rem; }
+  .comment-list { margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); }
+  .comment-item { font-size:0.85rem; color: var(--text-muted); margin:0.4rem 0; }
+  .comment-item .cmt-author { color: var(--gold); font-weight:600; }
+  .comment-item .cmt-time { font-size:0.75rem; color: #666; }
+  .add-comment { display:flex; gap:0.5rem; margin-top:0.5rem; }
+  .add-comment input { flex:1; background: var(--surface-up); border:1px solid var(--border); color: var(--text); padding:0.4rem 0.6rem; border-radius:4px; font-size:0.85rem; }
+  .add-comment input:focus { outline:none; border-color: var(--gold); }
+  .add-comment button { padding:0.4rem 0.8rem; font-size:0.8rem; margin-top:0; }
+
+  /* User Modal */
+  .user-modal-overlay { position:fixed; inset:0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display:none; justify-content:center; align-items:center; z-index:2000; padding:1rem; }
+  .user-modal-overlay.active { display:flex; }
+  .user-modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; width:100%; max-width: 400px; }
+  .user-modal h3 { margin-bottom:1rem; color: var(--gold); }
+  .user-modal input { width:100%; background: var(--surface-up); border:1px solid var(--border); color: var(--text); padding:0.6rem 0.8rem; border-radius:6px; font-size:0.95rem; margin-bottom:0.75rem; }
+  .user-modal input:focus { outline:none; border-color: var(--gold); }
+  .avatar-picker { display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+  .avatar-option { font-size:1.5rem; padding:0.4rem; cursor:pointer; border-radius:6px; border: 2px solid transparent; transition: var(--transition); }
+  .avatar-option:hover { background: var(--surface-up); }
+  .avatar-option.selected { border-color: var(--gold); background: var(--surface-up); }
+
+  /* Leaflet custom */
+  .leaflet-popup-content-wrapper { background: var(--surface) !important; color: var(--text) !important; border-radius: var(--radius) !important; border: 1px solid var(--border) !important; }
+  .leaflet-popup-tip { background: var(--surface) !important; border: 1px solid var(--border) !important; }
+  .leaflet-popup-content { margin:0.75rem 1rem; font-family:'Inter',sans-serif; font-size:0.9rem; }
+  .popup-score { font-weight:700; font-size:1.1rem; margin-top:0.3rem; }
+  .popup-link { color: var(--gold); cursor:pointer; text-decoration:underline; margin-top:0.4rem; display:inline-block; }
+  .custom-marker { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; border: 2px solid var(--bg); font-weight:700; font-size:0.8rem; color:#fff; font-family: 'Bebas Neue', sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,0.5); transition: transform 0.3s ease; }
+  .custom-marker:hover { transform: scale(1.15); }
+  .marker-good { background: var(--good); } .marker-ok { background: var(--ok); } .marker-bad { background: var(--bad); } .marker-none { background: #555; }
+
+  @keyframes cardEnter { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform: translateY(0); } }
+  .card-enter { animation: cardEnter 0.5s cubic-bezier(0.4,0,0.2,1) forwards; opacity:0; }
+
+  @media (max-width:600px) {
+    .cards-grid { grid-template-columns: 1fr; } .hero h1 { font-size: 2.5rem; } .drawer { max-width: 100%; }
+    .search-input { width: 160px; } .search-input:focus { width: 200px; } .live-ticker { padding:0.5rem 1rem; }
+    .hero-map { height: 45vh; } .map-overlay { display:none; }
+  }
+
+  /* Footer & Donate */
+  .app-footer { text-align:center; padding:2rem 1rem; border-top:1px solid var(--border); margin-top:2rem; }
+  .app-footer p { color:var(--text-muted); font-size:0.75rem; margin-bottom:0.8rem; }
+  .app-footer a { color:var(--gold); text-decoration:none; }
+  .donate-btn { display:inline-flex; align-items:center; gap:0.5rem; background:var(--gold); color:var(--bg); padding:0.6rem 1.4rem; border-radius:8px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:0.9rem; text-decoration:none; transition:var(--transition); cursor:pointer; border:none; }
+  .donate-btn:hover { background:var(--gold-light); transform:scale(1.05); }
+  .donate-section { margin-top:1rem; }
+  .donate-note { font-size:0.65rem; color:var(--text-dim); margin-top:0.5rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><i class="fas fa-hotdog"></i> Matsimakkara-indeksi</div>
+  <div class="header-right">
+    <div class="search-wrap"><i class="fas fa-search"></i><input type="text" class="search-input" id="search-input" placeholder="Hae stadionia..." oninput="handleSearch()"></div>
+    <div class="user-badge" id="user-badge" onclick="openUserModal()">
+      <span class="user-avatar" id="user-avatar">👤</span><span id="user-name">Kirjaudu</span>
+    </div>
+  </div>
+</header>
+
+<div class="hero">
+  <h1>MATSIMÄKKÄRÄINDEKSI</h1>
+  <p>Suomen stadionmakkaroiden kattavin arvostelualusta. Kaikille avoin.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num" id="hero-stadium-count">0</div><div class="label">Stadionia</div></div>
+    <div class="hero-stat"><div class="num" id="hero-review-count">0</div><div class="label">Arvostelua</div></div>
+    <div class="hero-stat"><div class="num" id="hero-top-stadium">–</div><div class="label">Ykkönen</div></div>
+  </div>
+</div>
+
+<div class="live-ticker" id="live-ticker">
+  <div class="live-ticker-title">Ottelut</div>
+  <div class="api-status" id="api-status"><span class="dot" style="background:var(--text-muted);"></span>Ladataan...</div>
+  <span class="ticker-refresh" onclick="refreshMatches()" title="Päivitä"><i class="fas fa-sync-alt"></i> Päivitä</span>
+</div>
+
+<div class="hero-map">
+  <div id="map"></div>
+  <div class="map-overlay">
+    <h2>Kartta</h2>
+    <p>Klikkaa markeria avataksesi stadionin</p>
+    <div class="map-legend">
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:var(--good);"></span> Erinomainen</div>
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:var(--ok);"></span> Hyvä</div>
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:var(--bad);"></span> Heikko</div>
+    </div>
+  </div>
+</div>
+
+<div class="scroll-hint"><i class="fas fa-chevron-down"></i> Selaa alas nähdäksesi rankingin</div>
+
+<div class="cards-section">
+  <h2>Stadionit</h2>
+  <div class="cards-grid" id="cards-grid"></div>
+</div>
+
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer(event)"></div>
+<div class="drawer" id="drawer" onclick="event.stopPropagation()">
+  <div class="drawer-header"><div class="drawer-title" id="drawer-title">Stadion</div><button class="drawer-close" onclick="closeDrawer()">&times;</button></div>
+  <div class="drawer-tabs">
+    <button class="drawer-tab-btn active" onclick="switchDrawerTab('info')">📋 Info</button>
+    <button class="drawer-tab-btn" onclick="switchDrawerTab('review')">⭐ Arvostele</button>
+    <button class="drawer-tab-btn" onclick="switchDrawerTab('reviews')">📝 Arviot</button>
+  </div>
+  <div class="drawer-body">
+    <div id="pane-info" class="drawer-pane active"></div>
+    <div id="pane-review" class="drawer-pane"></div>
+    <div id="pane-reviews" class="drawer-pane"></div>
+  </div>
+</div>
+
+<div class="user-modal-overlay" id="user-modal-overlay" onclick="closeUserModal(event)">
+  <div class="user-modal" onclick="event.stopPropagation()">
+    <h3>Profiili</h3>
+    <div class="avatar-picker" id="avatar-picker"></div>
+    <input type="text" id="user-input-name" placeholder="Nimi">
+    <input type="email" id="user-input-email" placeholder="Sähköposti (valinnainen)">
+    <button class="btn" onclick="saveUser()">Tallenna</button>
+    <button class="btn btn-secondary" style="margin-left:0.5rem;" onclick="closeUserModal()">Peruuta</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+const STORAGE = { stadiums:'matsimakkara_stadiums', reviews:'matsimakkara_reviews', matches:'matsimakkara_matches', images:'matsimakkara_images', users:'matsimakkara_users', currentUser:'matsimakkara_current_user', apiMatches:'matsimakkara_api_matches', apiLastFetch:'matsimakkara_api_last_fetch' };
+const CRITERIA = [{id:'structure',icon:'🌭',name:'Rakenne & kuori'},{id:'grilling',icon:'🔥',name:'Paistoaste'},{id:'mustard',icon:'🟡',name:'Sinappi & lisukkeet'},{id:'value',icon:'💰',name:'Hinta-laatusuhde'},{id:'service',icon:'😊',name:'Palvelu & jonotus'}];
+const AVATARS = ['👤','🌭','🔥','⚽','🏟️','🍺','🥇','🧑','👩','🧔','👴','🧒'];
+const API_LEAGUE_ID = 4636;
+const TEAM_TO_STADIUM = { 'HJK Helsinki':'bolt', 'Inter Turku':'veritas', 'SJK Seinajoki':'seinajoki', 'KuPS':'kuopio', 'AC Oulu':'oulu', 'Ilves':'tampere', 'KTP':'kotka', 'Lahti':'lahti', 'VPS':'vaasa', 'IFK Mariehamn':'mariehamn', 'Gnistan':'toolo', 'TPS':'veritas', 'Jaro':'jyvaskyla', 'FC Haka':'hameenlinna', 'Haka':'hameenlinna' };
+const DEFAULT_STADIUMS = [
+  {id:'bolt',name:'Bolt Arena',city:'Helsinki',lat:60.187,lng:24.922,price:null},{id:'toolo',name:'Töölön jalkapallostadion',city:'Helsinki',lat:60.189,lng:24.922,price:null},
+  {id:'veritas',name:'Veritas-stadion',city:'Turku',lat:60.443,lng:22.260,price:null},{id:'lahti',name:'Lahden stadion',city:'Lahti',lat:60.983,lng:25.661,price:null},
+  {id:'oulu',name:'Raatin stadion',city:'Oulu',lat:65.012,lng:25.484,price:null},{id:'vaasa',name:'Hietalahden jalkapallostadion',city:'Vaasa',lat:63.086,lng:21.616,price:null},
+  {id:'tampere',name:'Tammelan stadion',city:'Tampere',lat:61.498,lng:23.737,price:null},{id:'pori',name:'Pori Stadium',city:'Pori',lat:61.483,lng:21.790,price:null},
+  {id:'rovaniemi',name:'Rovaniemen keskuskenttä',city:'Rovaniemi',lat:66.503,lng:25.723,price:null},{id:'kotka',name:'Arto Tolsa Areena',city:'Kotka',lat:60.465,lng:26.946,price:null},
+  {id:'mikkeli',name:'Mikkelin Pallokenttä',city:'Mikkeli',lat:61.688,lng:27.272,price:null},{id:'hameenlinna',name:'Kaurialan stadion',city:'Hämeenlinna',lat:60.995,lng:24.464,price:null},
+  {id:'kuopio',name:'Kuopion stadion',city:'Kuopio',lat:62.892,lng:27.678,price:null},{id:'seinajoki',name:'OmaSP Stadion',city:'Seinäjoki',lat:62.794,lng:22.828,price:null},
+  {id:'jyvaskyla',name:'Harjun stadion',city:'Jyväskylä',lat:62.242,lng:25.747,price:null},{id:'kemi',name:'Sauvosaaren kenttä',city:'Kemi',lat:65.735,lng:24.563,price:null},
+  {id:'imatra',name:'Ukonniemen stadion',city:'Imatra',lat:61.171,lng:28.674,price:null},{id:'kajaani',name:'Kajaanin liikuntapuisto',city:'Kajaani',lat:64.228,lng:27.728,price:null},
+  {id:'kokkola',name:'Kokkolan keskuskenttä',city:'Kokkola',lat:63.837,lng:23.130,price:null},{id:'mariehamn',name:'Wiklöf Holding Arena',city:'Maarianhamina',lat:60.102,lng:19.941,price:null},
+  {id:'tornio',name:'Pohjan stadion',city:'Tornio',lat:65.848,lng:24.147,price:null},{id:'salo',name:'Salon Urheilupuisto',city:'Salo',lat:60.383,lng:23.126,price:null},
+  {id:'kemio',name:'Kemiön liikuntapuisto',city:'Kemiö',lat:60.163,lng:22.728,price:null},{id:'riihimaki',name:'Riihimäen urheilupuisto',city:'Riihimäki',lat:60.739,lng:24.771,price:null},
+  {id:'kerava',name:'Keravan keskuskenttä',city:'Kerava',lat:60.404,lng:25.104,price:null}
+];
+
+let stadiums=[], reviews=[], matches=[], images=[], users=[], currentUser=null, apiMatches=[], map=null, markers=[], currentStadiumId=null, currentRatings={}, searchQuery='';
+
+function init(){ loadData(); loadUser(); loadApiMatches(); renderHero(); renderList(); initMap(); initAvatarPicker(); renderTicker(); handleShareLink(); setInterval(()=>{refreshMatches();},30*60*1000); }
+function loadData(){ try{ const s=localStorage.getItem(STORAGE.stadiums), r=localStorage.getItem(STORAGE.reviews), m=localStorage.getItem(STORAGE.matches), i=localStorage.getItem(STORAGE.images), u=localStorage.getItem(STORAGE.users), a=localStorage.getItem(STORAGE.apiMatches); stadiums=s?JSON.parse(s):structuredClone(DEFAULT_STADIUMS); reviews=r?JSON.parse(r):[]; matches=m?JSON.parse(m):[]; images=i?JSON.parse(i):[]; users=u?JSON.parse(u):[]; apiMatches=a?JSON.parse(a):[]; }catch(e){ stadiums=structuredClone(DEFAULT_STADIUMS); reviews=[]; matches=[]; images=[]; users=[]; apiMatches=[]; } saveData(); }
+function saveData(){ localStorage.setItem(STORAGE.stadiums,JSON.stringify(stadiums)); localStorage.setItem(STORAGE.reviews,JSON.stringify(reviews)); localStorage.setItem(STORAGE.matches,JSON.stringify(matches)); localStorage.setItem(STORAGE.images,JSON.stringify(images)); localStorage.setItem(STORAGE.users,JSON.stringify(users)); localStorage.setItem(STORAGE.apiMatches,JSON.stringify(apiMatches)); if(currentUser)localStorage.setItem(STORAGE.currentUser,JSON.stringify(currentUser)); else localStorage.removeItem(STORAGE.currentUser); localStorage.setItem(STORAGE.apiLastFetch,Date.now().toString()); }
+function loadUser(){ try{ const c=localStorage.getItem(STORAGE.currentUser); if(c)currentUser=JSON.parse(c); }catch(e){currentUser=null;} updateUserBadge(); }
+function updateUserBadge(){ const badge=document.getElementById('user-badge'), avatar=document.getElementById('user-avatar'), name=document.getElementById('user-name'); if(currentUser){avatar.textContent=currentUser.avatar||'👤'; name.textContent=currentUser.name; badge.style.borderColor='var(--gold)';}else{avatar.textContent='👤'; name.textContent='Kirjaudu'; badge.style.borderColor='var(--border)';} }
+function openUserModal(){ document.getElementById('user-modal-overlay').classList.add('active'); if(currentUser){ document.getElementById('user-input-name').value=currentUser.name||''; document.getElementById('user-input-email').value=currentUser.email||''; selectAvatar(currentUser.avatar||'👤'); } }
+function closeUserModal(e){ if(e&&e.target!==e.currentTarget)return; document.getElementById('user-modal-overlay').classList.remove('active'); }
+function initAvatarPicker(){ document.getElementById('avatar-picker').innerHTML=AVATARS.map(a=>`<span class="avatar-option" data-avatar="${a}" onclick="selectAvatar('${a}')">${a}</span>`).join(''); }
+function selectAvatar(avatar){ document.querySelectorAll('.avatar-option').forEach(el=>el.classList.toggle('selected',el.dataset.avatar===avatar)); window._selectedAvatar=avatar; }
+function saveUser(){ const name=document.getElementById('user-input-name').value.trim(), email=document.getElementById('user-input-email').value.trim(), avatar=window._selectedAvatar||'👤'; if(!name){alert('Anna nimi');return;} const id=currentUser?currentUser.id:'user_'+Date.now(); currentUser={id,name,email,avatar,createdAt:currentUser?currentUser.createdAt:Date.now()}; const idx=users.findIndex(u=>u.id===id); if(idx>=0)users[idx]=currentUser; else users.push(currentUser); saveData(); updateUserBadge(); closeUserModal(); }
+function getStats(stadiumId){ const revs=reviews.filter(r=>r.stadiumId===stadiumId); if(!revs.length)return{avg:0,count:0,criteria:CRITERIA.map(()=>0)}; const sum=revs.reduce((acc,r)=>acc+r.overall,0), avg=sum/revs.length; const criteria=CRITERIA.map((c,idx)=>{const vals=revs.map(r=>r.criteria[idx]).filter(v=>v>0); return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;}); return{avg,count:revs.length,criteria}; }
+function scoreClass(avg){ if(avg>=4)return'score-good'; if(avg>=3)return'score-ok'; return'score-bad'; }
+function scoreColor(avg){ if(avg>=4)return'good'; if(avg>=3)return'ok'; return'bad'; }
+function barColor(val){ if(val>=4)return'var(--good)'; if(val>=3)return'var(--ok)'; return'var(--bad)'; }
+function getFilteredStadiums(){ if(!searchQuery)return stadiums; const q=searchQuery.toLowerCase(); return stadiums.filter(s=>s.name.toLowerCase().includes(q)||s.city.toLowerCase().includes(q)); }
+function handleSearch(){ searchQuery=document.getElementById('search-input').value.trim(); renderList(); renderMapMarkers(); renderHero(); }
+function renderHero(){ const filtered=getFilteredStadiums(); document.getElementById('hero-stadium-count').textContent=filtered.length; document.getElementById('hero-review-count').textContent=reviews.length; const list=stadiums.map(s=>({s,stats:getStats(s.id)})).sort((a,b)=>b.stats.avg-a.stats.avg); document.getElementById('hero-top-stadium').textContent=list[0]&&list[0].stats.avg?list[0].s.name:'–'; }
+function renderList(){ const grid=document.getElementById('cards-grid'), filtered=getFilteredStadiums(); const list=filtered.map(s=>({s,stats:getStats(s.id)})).sort((a,b)=>b.stats.avg-a.stats.avg); if(!list.length){ grid.innerHTML='<div class="empty-state"><i class="fas fa-hotdog"></i><p>Ei tuloksia haulle "'+escapeHtml(searchQuery)+'"</p></div>'; return; } grid.innerHTML=list.map((item,idx)=>renderCard(item.s,item.stats,idx)).join(''); grid.querySelectorAll('.card').forEach((card,i)=>{ card.style.animationDelay=(i*0.05)+'s'; card.classList.add('card-enter'); }); }
+function renderCard(s,stats,rank){ const medal=rank===0?'🥇':rank===1?'🥈':rank===2?'🥉':''; const avgStr=stats.avg?stats.avg.toFixed(1):'–'; const sc=stats.avg?scoreClass(stats.avg):'score-bad'; const priceStr=s.price?s.price.toFixed(2)+' €':'–'; const matchCount=matches.filter(m=>m.stadiumId===s.id).length; const imgCount=images.filter(i=>i.stadiumId===s.id).length; const apiMatchList=getMatchesForStadium(s.id); let barsHtml=''; if(stats.avg){ barsHtml=CRITERIA.map((c,i)=>{const val=stats.criteria[i]; return`<div class="bar-row"><span class="bar-icon">${c.icon}</span><span class="bar-name">${c.name}</span><div class="bar-bg"><div class="bar-fill" style="width:${val?val/5*100:0}%;background:${barColor(val)};"></div></div><span class="bar-val">${val?val.toFixed(1):'–'}</span></div>`;}).join(''); }else{ barsHtml='<div class="bar-row" style="color:var(--text-muted);font-size:0.8rem;">Ei arvosteluja vielä</div>'; } let matchStrip=''; if(apiMatchList.length){ matchStrip='<div class="card-matches">'+apiMatchList.slice(0,2).map(m=>{ const isLive=m.strStatus==='NS'&&new Date(m.dateEvent+'T'+m.strTime)<new Date(); const isPast=m.strStatus==='FT'; return`<div class="card-match-item"><span>${m.strHomeTeam} – ${m.strAwayTeam}</span><span>${isLive?'<span class="match-live">Live</span>':isPast?'<span class="match-score">'+m.intHomeScore+'-'+m.intAwayScore+'</span>':'<span class="match-date">'+m.dateEvent+'</span>'}</span></div>`; }).join('')+'</div>'; } return`<div class="card" id="card-${s.id}" onclick="openDrawer('${s.id}')">${medal?`<div class="rank-badge">${medal}</div>`:''}<div class="card-header"><h3>${s.name}</h3><div class="city"><i class="fas fa-map-marker-alt" style="font-size:0.7rem;"></i> ${s.city}</div></div><div class="score-row"><div><div class="score-big ${sc}">${avgStr}</div><div class="score-label">Keskiarvo</div></div><div style="text-align:right;"><div style="font-size:0.85rem;color:var(--text-muted);">${stats.count} arvostelu${stats.count!==1?'a':''}</div></div></div><div class="card-bars">${barsHtml}</div>${matchStrip}<div class="card-footer"><span><i class="fas fa-euro-sign"></i>${priceStr}</span><span><i class="fas fa-futbol"></i>${matchCount} ottelu${matchCount!==1?'a':''}</span><span><i class="fas fa-image"></i>${imgCount} kuva${imgCount!==1?'a':''}</span></div></div>`; }
+function getMatchesForStadium(stadiumId){ return apiMatches.filter(m=>m.stadiumId===stadiumId).sort((a,b)=>new Date(b.dateEvent)-new Date(a.dateEvent)); }
+function initMap(){ map=L.map('map',{zoomControl:false}).setView([64.5,26],5); L.control.zoom({position:'topright'}).addTo(map); L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',subdomains:'abcd',maxZoom:19}).addTo(map); renderMapMarkers(); }
+function renderMapMarkers(){ markers.forEach(m=>map.removeLayer(m)); markers=[]; const filtered=getFilteredStadiums(); filtered.forEach(s=>{ const stats=getStats(s.id); const cls=stats.avg?'marker-'+scoreColor(stats.avg):'marker-none'; const avgStr=stats.avg?stats.avg.toFixed(1):'–'; const icon=L.divIcon({className:'',html:`<div class="custom-marker ${cls}">${avgStr}</div>`,iconSize:[36,36],iconAnchor:[18,18]}); const marker=L.marker([s.lat,s.lng],{icon}).addTo(map); const imgCount=images.filter(i=>i.stadiumId===s.id).length; const popupHtml=`<div><div style="font-weight:700;font-size:1rem;margin-bottom:0.2rem;">${s.name}</div><div style="color:var(--text-muted);font-size:0.85rem;">${s.city}</div><div class="popup-score ${stats.avg?scoreClass(stats.avg):'score-bad'}">${avgStr} / 5</div><div style="color:var(--text-muted);font-size:0.8rem;margin-top:0.2rem;">${stats.count} arvostelu${stats.count!==1?'a':''} · ${imgCount} kuva${imgCount!==1?'a':''}</div><span class="popup-link" onclick="openDrawer('${s.id}')">Avaa tiedot &rarr;</span></div>`; marker.bindPopup(popupHtml); markers.push(marker); }); }
+function openDrawer(id){ currentStadiumId=id; currentRatings={}; const s=stadiums.find(x=>x.id===id); if(!s)return; document.getElementById('drawer-title').textContent=s.name; switchDrawerTab('info'); renderDrawerInfo(); renderDrawerReview(); renderDrawerReviews(); document.getElementById('drawer-overlay').classList.add('active'); document.getElementById('drawer').classList.add('active'); document.body.style.overflow='hidden'; highlightCard(id); }
+function highlightCard(id){ document.querySelectorAll('.card').forEach(c=>c.style.borderColor=''); const card=document.getElementById('card-'+id); if(card){ card.style.borderColor='var(--gold)'; card.scrollIntoView({behavior:'smooth',block:'center'}); } }
+function closeDrawer(e){ if(e&&e.target!==e.currentTarget)return; document.getElementById('drawer').classList.remove('active'); document.getElementById('drawer-overlay').classList.remove('active'); document.body.style.overflow=''; currentStadiumId=null; }
+function switchDrawerTab(tab){ document.querySelectorAll('.drawer-tab-btn').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.drawer-pane').forEach(p=>p.classList.remove('active')); document.querySelector(`.drawer-tab-btn[onclick="switchDrawerTab('${tab}')"]`).classList.add('active'); document.getElementById('pane-'+tab).classList.add('active'); }
+function renderDrawerInfo(){ const s=stadiums.find(x=>x.id===currentStadiumId); if(!s)return; const stadiumMatches=matches.filter(m=>m.stadiumId===s.id).sort((a,b)=>new Date(b.date)-new Date(a.date)); const apiMs=getMatchesForStadium(s.id); const allMatches=[...apiMs.map(m=>({...m,source:'api'})),...stadiumMatches.map(m=>({...m,source:'user'}))].sort((a,b)=>new Date(b.dateEvent||b.date)-new Date(a.dateEvent||a.date)); const matchListHtml=allMatches.length?allMatches.map(m=>{ const isApi=m.source==='api'; const isLive=isApi&&m.strStatus==='NS'&&new Date(m.dateEvent+'T'+m.strTime)<new Date(); const isPast=isApi&&m.strStatus==='FT'; const date=isApi?m.dateEvent:m.date; const teams=isApi?m.strHomeTeam+' – '+m.strAwayTeam:m.home+' – '+m.away; const score=isApi&&isPast?'<span class="match-score">'+m.intHomeScore+'-'+m.intAwayScore+'</span>':''; const liveBadge=isLive?'<span class="match-live">Live</span>':''; return`<div class="match-item"><span>${teams}</span><span>${liveBadge}${score}<span class="match-date">${date} · ${isApi?m.strLeague:'Käyttäjän lisäämä'}</span></span></div>`; }).join(''):'<div style="color:var(--text-muted);font-size:0.85rem;">Ei otteluita</div>'; const stadiumImages=images.filter(i=>i.stadiumId===s.id); const galleryHtml=stadiumImages.length?stadiumImages.map(img=>`<img src="${img.dataUrl}" class="gallery-thumb" onclick="showImage('${img.dataUrl}')">`).join(''):'<div style="color:var(--text-muted);font-size:0.85rem;">Ei kuvia</div>'; const stats=getStats(s.id); const avgStr=stats.avg?stats.avg.toFixed(1):'–'; document.getElementById('pane-info').innerHTML=`<div class="info-section"><h4>Perustiedot</h4><p style="font-size:1rem;color:var(--text);">${s.name}</p><p style="font-size:0.9rem;">${s.city}</p><p style="font-size:0.85rem;margin-top:0.5rem;">Keskiarvo: <span style="color:var(--gold);font-weight:700;">${avgStr}</span> / 5 (${stats.count} arvostelu${stats.count!==1?'a':''})</p></div><div class="info-section"><h4>Hinta</h4><div class="price-input"><input type="number" step="0.01" id="price-input" value="${s.price!==null?s.price:''}" placeholder="0.00"><span style="color:var(--text-muted);">€</span><button class="btn" style="margin-top:0;" onclick="updatePrice()">Tallenna</button></div></div><div class="info-section"><h4>Ottelut</h4><div class="match-form"><input type="text" id="match-home" placeholder="Kotijoukkue" style="flex:1;min-width:120px;"><input type="text" id="match-away" placeholder="Vierasjoukkue" style="flex:1;min-width:120px;"><input type="date" id="match-date"><button class="btn" style="margin-top:0;" onclick="addMatch()">Lisää</button></div><div class="match-list">${matchListHtml}</div></div><div class="info-section"><h4>Kuvat</h4><div class="image-upload"><label class="upload-btn"><i class="fas fa-upload"></i> Lataa kuva<input type="file" accept="image/*" onchange="handleImageUpload(event)"></label></div><div class="gallery">${galleryHtml}</div></div><div class="share-section"><h4>Jaa</h4><button class="btn btn-secondary share-btn" onclick="shareStadium()"><i class="fas fa-link"></i> Kopioi linkki tähän stadioniin</button></div>`; }
+function renderDrawerReview(){ const html=CRITERIA.map(c=>`<div class="criterion-row"><div class="criterion-label"><span>${c.icon}</span> ${c.name}</div><div class="stars" id="stars-${c.id}">${[1,2,3,4,5].map(star=>`<span class="star" data-val="${star}" onclick="setRating('${c.id}',${star})" onmouseenter="hoverStar('${c.id}',${star})" onmouseleave="resetStar('${c.id}')">★</span>`).join('')}</div></div>`).join('')+'<textarea class="comment-area" id="review-comment" placeholder="Kommentti (valinnainen)"></textarea><button class="btn" id="submit-review-btn" onclick="submitReview()">Lähetä arvostelu</button>'; document.getElementById('pane-review').innerHTML=html; currentRatings={}; }
+function renderDrawerReviews(){ const revs=reviews.filter(r=>r.stadiumId===currentStadiumId).sort((a,b)=>b.timestamp-a.timestamp); const stats=getStats(currentStadiumId); let summaryHtml=''; if(stats.avg){ summaryHtml=`<div class="criteria-summary">${CRITERIA.map((c,i)=>`<div class="crit-summary-item"><span class="crit-summary-name">${c.icon} ${c.name}</span><span class="crit-summary-val">${stats.criteria[i].toFixed(1)}</span></div>`).join('')}</div>`; } const reviewsHtml=revs.length?revs.map((r,idx)=>{ const stars='★'.repeat(Math.round(r.overall))+'☆'.repeat(5-Math.round(r.overall)); const date=new Date(r.timestamp).toLocaleDateString('fi-FI'); const author=r.author?`<span class="review-author">${escapeHtml(r.author)}</span> · `:'<span class="review-author">Anonyymi</span> · '; const comments=r.comments||[]; const commentsHtml=comments.length?`<div class="comment-list">${comments.map(c=>`<div class="comment-item"><span class="cmt-author">${escapeHtml(c.author)}</span>: ${escapeHtml(c.text)} <span class="cmt-time">${new Date(c.timestamp).toLocaleDateString('fi-FI')}</span></div>`).join('')}</div>`:''; const addCommentHtml=`<div class="add-comment"><input type="text" id="comment-input-${idx}" placeholder="Kommentoi..."><button class="btn" style="margin-top:0;padding:0.4rem 0.8rem;font-size:0.8rem;" onclick="addComment(${r.timestamp},${idx})">Lähetä</button></div>`; return`<div class="review-item"><div class="review-meta">${author}${date}<span>${stars}</span></div><div class="review-stars">${stars}</div>${r.comment?`<div class="review-comment">${escapeHtml(r.comment)}</div>`:''}${commentsHtml}${addCommentHtml}</div>`; }).join(''):'<div style="color:var(--text-muted);text-align:center;padding:2rem 0;">Ei arvosteluja vielä. Ole ensimmäinen!</div>'; document.getElementById('pane-reviews').innerHTML=`<div style="margin-bottom:1rem;"><strong>Kokonaiskeskiarvo:</strong> <span style="color:var(--gold);font-size:1.2rem;">${stats.avg?stats.avg.toFixed(1):'–'}</span> / 5 (${stats.count} arvostelu${stats.count!==1?'a':''})</div>${summaryHtml}${reviewsHtml}`; }
+function setRating(criterionId,value){ currentRatings[criterionId]=value; updateStarDisplay(criterionId); }
+function hoverStar(criterionId,value){ const container=document.getElementById('stars-'+criterionId); if(!container)return; container.querySelectorAll('.star').forEach((s,i)=>{s.classList.toggle('hovered',i<value);}); }
+function resetStar(criterionId){ updateStarDisplay(criterionId); }
+function updateStarDisplay(criterionId){ const container=document.getElementById('stars-'+criterionId); if(!container)return; const val=currentRatings[criterionId]||0; container.querySelectorAll('.star').forEach((s,i)=>{s.classList.toggle('filled',i<val);s.classList.remove('hovered');}); }
+function submitReview(){ if(!currentStadiumId)return; const missing=CRITERIA.filter(c=>!currentRatings[c.id]); if(missing.length){alert('Anna tähdet kaikille kriteereille: '+missing.map(c=>c.name).join(', '));return;} const criteriaArray=CRITERIA.map(c=>currentRatings[c.id]); const overall=criteriaArray.reduce((a,b)=>a+b,0)/criteriaArray.length; const comment=document.getElementById('review-comment').value.trim(); const author=currentUser?currentUser.name:null; reviews.push({stadiumId:currentStadiumId,criteria:criteriaArray,overall,comment:comment||null,author,timestamp:Date.now(),comments:[]}); saveData(); renderList(); renderMapMarkers(); renderHero(); switchDrawerTab('reviews'); renderDrawerReviews(); }
+function addComment(reviewTimestamp,idx){ const input=document.getElementById('comment-input-'+idx); if(!input)return; const text=input.value.trim(); if(!text)return; const author=currentUser?currentUser.name:'Anonyymi'; const review=reviews.find(r=>r.timestamp===reviewTimestamp&&r.stadiumId===currentStadiumId); if(!review)return; if(!review.comments)review.comments=[]; review.comments.push({author,text,timestamp:Date.now()}); saveData(); renderDrawerReviews(); }
+function updatePrice(){ const val=document.getElementById('price-input').value; const s=stadiums.find(x=>x.id===currentStadiumId); if(!s)return; s.price=val===''?null:parseFloat(val); saveData(); renderList(); renderMapMarkers(); }
+function addMatch(){ const home=document.getElementById('match-home').value.trim(), away=document.getElementById('match-away').value.trim(), date=document.getElementById('match-date').value; if(!home||!away||!date){alert('Täytä kaikki kentät');return;} matches.push({stadiumId:currentStadiumId,home,away,date,league:'Käyttäjän lisäämä',id:Date.now()+Math.random()}); saveData(); renderDrawerInfo(); renderList(); }
+function handleImageUpload(e){ const file=e.target.files[0]; if(!file)return; if(!file.type.startsWith('image/')){alert('Valitse kuva');return;} const stadiumImages=images.filter(i=>i.stadiumId===currentStadiumId); if(stadiumImages.length>=5){alert('Max 5 kuvaa stadionilla');return;} const reader=new FileReader(); reader.onload=function(event){ const img=new Image(); img.onload=function(){ const canvas=document.createElement('canvas'); const maxWidth=800; let w=img.width,h=img.height; if(w>maxWidth){h=(h*maxWidth)/w;w=maxWidth;} canvas.width=w; canvas.height=h; const ctx=canvas.getContext('2d'); ctx.drawImage(img,0,0,w,h); const dataUrl=canvas.toDataURL('image/jpeg',0.8); images.push({stadiumId:currentStadiumId,dataUrl,id:Date.now(),author:currentUser?currentUser.name:null}); saveData(); renderDrawerInfo(); renderList(); renderMapMarkers(); }; img.src=event.target.result; }; reader.readAsDataURL(file); }
+function showImage(url){ const win=window.open(); if(win)win.document.write('<img src="'+url+'" style="max-width:100%;height:auto;display:block;margin:auto;background:#1a1a1a;">'); }
+function shareStadium(){ if(!currentStadiumId)return; const s=stadiums.find(x=>x.id===currentStadiumId); const stats=getStats(currentStadiumId); const data={stadiumId:currentStadiumId,name:s.name,avg:stats.avg?stats.avg.toFixed(1):null,count:stats.count}; const hash='#share='+btoa(JSON.stringify(data)); const url=window.location.origin+window.location.pathname+hash; navigator.clipboard.writeText(url).then(()=>alert('Linkki kopioitu leikepöydälle!')).catch(()=>alert('Kopiointi epäonnistui. URL: '+url)); }
+function handleShareLink(){ const hash=window.location.hash; if(!hash.startsWith('#share='))return; try{ const data=JSON.parse(atob(hash.slice(7))); if(data.stadiumId)setTimeout(()=>openDrawer(data.stadiumId),500); }catch(e){} }
+function escapeHtml(str){ if(!str)return''; return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* API */
+function loadApiMatches(){ try{ const a=localStorage.getItem(STORAGE.apiMatches); if(a)apiMatches=JSON.parse(a); }catch(e){apiMatches=[];} const last=parseInt(localStorage.getItem(STORAGE.apiLastFetch)||'0'); if(Date.now()-last>30*60*1000)refreshMatches(); }
+async function refreshMatches(){ const status=document.getElementById('api-status'); if(status){status.innerHTML='<span class="dot" style="background:var(--ok);"></span>Päivitetään...'; status.className='api-status';} try{ const nextRes=await fetch('https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id='+API_LEAGUE_ID); const nextData=await nextRes.json(); const pastRes=await fetch('https://www.thesportsdb.com/api/v1/json/3/eventspastleague.php?id='+API_LEAGUE_ID); const pastData=await pastRes.json(); const allEvents=[]; if(nextData.events)nextData.events.forEach(e=>allEvents.push({...e,strStatus:'NS'})); if(pastData.events)pastData.events.forEach(e=>allEvents.push({...e,strStatus:e.intHomeScore!==null?'FT':'NS'})); apiMatches=[]; allEvents.forEach(ev=>{ const team=ev.strHomeTeam; const stadiumId=TEAM_TO_STADIUM[team]; if(stadiumId){ apiMatches.push({...ev,stadiumId}); } }); saveData(); renderTicker(); renderList(); if(status){status.innerHTML='<span class="dot" style="background:var(--good);"></span>Live'; status.className='api-status ok';} }catch(err){ console.error('API fetch failed:',err); if(status){status.innerHTML='<span class="dot" style="background:var(--bad);"></span>Offline'; status.className='api-status error';} } }
+function renderTicker(){ const ticker=document.getElementById('live-ticker'); if(!ticker)return; const title=ticker.querySelector('.live-ticker-title'); const status=ticker.querySelector('.api-status'); const refresh=ticker.querySelector('.ticker-refresh'); const upcoming=apiMatches.filter(m=>m.strStatus==='NS').sort((a,b)=>new Date(a.dateEvent)-new Date(b.dateEvent)).slice(0,5); const past=apiMatches.filter(m=>m.strStatus==='FT').sort((a,b)=>new Date(b.dateEvent)-new Date(a.dateEvent)).slice(0,3); let html=''; if(upcoming.length){ html+=upcoming.map(m=>`<div class="live-match"><span class="live-dot"></span><span class="match-teams">${m.strHomeTeam} – ${m.strAwayTeam}</span><span class="match-time">${m.dateEvent}</span></div>`).join(''); } if(past.length){ html+=past.map(m=>`<div class="live-match"><span class="match-teams">${m.strHomeTeam} – ${m.strAwayTeam}</span><span class="match-score">${m.intHomeScore}-${m.intAwayScore}</span></div>`).join(''); } if(!upcoming.length&&!past.length){ html='<span style="color:var(--text-muted);font-size:0.85rem;">Ei otteluita saatavilla</span>'; } ticker.innerHTML=''; ticker.appendChild(title); const container=document.createElement('div'); container.style.display='flex'; container.style.gap='0.5rem'; container.style.overflowX='auto'; container.innerHTML=html; ticker.appendChild(container); if(status)ticker.appendChild(status); if(refresh)ticker.appendChild(refresh); }
+
+window.addEventListener('DOMContentLoaded',init);
+</script>
+
+<!-- Footer -->
+<div class="app-footer">
+  <p>Matsimakkara-indeksi &mdash; Kaikille avoin stadionmakkaraindeksi</p>
+  <div class="donate-section">
+    <a href="https://www.buymeacoffee.com/YOUR_USERNAME" target="_blank" class="donate-btn">
+      <i class="fas fa-heart"></i> Tue projektia
+    </a>
+  </div>
+  <p class="donate-note">Korvaa YOUR_USERNAME omalla Buy Me a Coffee -tunnuksellasi</p>
+</div>
+
+</body>
+</html>
